@@ -29,7 +29,7 @@ class Filter:
         if self.min_players is not None:
             conditions.append(int(server["Players"]) >= self.min_players)
         if self.max_players is not None:
-            conditions.append(int(server["MaxPlayers"]) <= self.max_players)
+            conditions.append(int(server["MaxPlayers"]) >= self.max_players)
         if self.region is not None:
             conditions.append(server["Region"] == self.region)
         if self.map is not None:
