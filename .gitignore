@@ -1,6 +1,12 @@
+# Environment
 .venv/
 .env
 
+# Python
 __pycache__/
 
+# Vscode
 .vscode/
+
+# Misc.
+user_filters.json
