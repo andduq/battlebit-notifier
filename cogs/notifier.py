@@ -13,6 +13,7 @@ from filter import Filter
 SERVER_LIST_URL = "https://publicapi.battlebit.cloud/Servers/GetServerList"
 USER_FILTERS_PATH = "user_filters.json"
 
+
 class Notifier(commands.Cog):
     server_list = []
     bot: commands.Bot = None
@@ -25,17 +26,34 @@ class Notifier(commands.Cog):
     def __init__(self, bot: discord.Client):
         self.bot = bot
 
-    # add listener for on_ready event
     @commands.Cog.listener()
     async def on_ready(self):
         await self.start()
-    
+
     @commands.guild_only()
     @discord.slash_command(
         name="start_notify",
-        description=f"Get notified when a server matches the specified filters.")
-    async def start_notify(self, ctx: discord.ApplicationContext, map : str, region : str | None, min_players : int | None, max_players : int | None, gamemode : str | None):
-        self.add_filter(ctx.author, Filter(min_players=min_players, max_players=max_players, map=map, region=region, game_mode=gamemode))
+        description=f"Get notified when a server matches the specified filters.",
+    )
+    async def start_notify(
+        self,
+        ctx: discord.ApplicationContext,
+        map: str,
+        region: str | None,
+        min_players: int | None,
+        max_players: int | None,
+        gamemode: str | None,
+    ):
+        self.add_filter(
+            ctx.author,
+            Filter(
+                min_players=min_players,
+                max_players=max_players,
+                map=map,
+                region=region,
+                game_mode=gamemode,
+            ),
+        )
         await ctx.send_response(
             f"Filter has been added.", ephemeral=True, delete_after=5
         )
@@ -43,8 +61,9 @@ class Notifier(commands.Cog):
     @commands.guild_only()
     @discord.slash_command(
         name="stop_notify",
-        description=f"Stop getting notified for the specified filter.")
-    async def stop_notify(self, ctx: discord.ApplicationContext, filter_index : int):
+        description=f"Stop getting notified for the specified filter.",
+    )
+    async def stop_notify(self, ctx: discord.ApplicationContext, filter_index: int):
         self.remove_filter(ctx.author, filter_index)
         await ctx.send_response(
             f"Filter has been removed.", ephemeral=True, delete_after=5
@@ -52,14 +71,12 @@ class Notifier(commands.Cog):
 
     @commands.guild_only()
     @discord.slash_command(
-        name="list_filters",
-        description=f"List all notification filters.")
+        name="list_filters", description=f"List all notification filters."
+    )
     async def list_filters(self, ctx: discord.ApplicationContext):
         filters = self.get_filters_for_user(ctx.author)
         if not filters:
-            await ctx.send_response(
-                f"No filters set.", ephemeral=True, delete_after=5
-            )
+            await ctx.send_response(f"No filters set.", ephemeral=True, delete_after=5)
             return
         filters_str = "\n".join([f"{i}: {filter}" for i, filter in enumerate(filters)])
         await ctx.send_response(
@@ -68,14 +85,13 @@ class Notifier(commands.Cog):
 
     @commands.guild_only()
     @discord.slash_command(
-        name="clear_filters",
-        description=f"Clear all notification filters.")
+        name="clear_filters", description=f"Clear all notification filters."
+    )
     async def clear_filters(self, ctx: discord.ApplicationContext):
         self.clear_filters(ctx.author)
         await ctx.send_response(
             f"Filters have been cleared.", ephemeral=True, delete_after=5
         )
-
 
     async def fetch_server_list(self) -> None:
         async with self.session.get(SERVER_LIST_URL) as response:
@@ -152,10 +168,10 @@ class Notifier(commands.Cog):
             value=f"**Players**: {server['Players']}{queue_str}/{server['MaxPlayers']}\n**Map**: {server['Map']}\n**Region**: {region_flag}\n**Gamemode**: {server['Gamemode']}",
             inline=False,
         )
-        
+
         main_dir = os.path.dirname(os.path.abspath(__file__))
         map_icon_path = os.path.join(main_dir, "map_icons", f"{server['Map']}.jpg")
-        
+
         if os.path.exists(map_icon_path):
             file = discord.File(map_icon_path, filename=f"{server['Map']}.jpg")
             embed.set_thumbnail(url=f"attachment://{server['Map']}.jpg")
@@ -163,19 +179,16 @@ class Notifier(commands.Cog):
         embed.timestamp = discord.utils.utcnow()
         await user.send(embed=embed, file=file)
 
-
-
     async def fetch_and_notify(self) -> None:
         while True:
             await self.fetch_server_list()
             await self.notify_users()
             await asyncio.sleep(5)
 
-
     async def start(self) -> None:
         self.session = aiohttp.ClientSession()
         fetch_notify_task = asyncio.create_task(self.fetch_and_notify())
-        
+
         main_dir = os.path.dirname(os.path.abspath(__file__))
         user_filters_path = os.path.join(main_dir, USER_FILTERS_PATH)
 
@@ -187,21 +200,32 @@ class Notifier(commands.Cog):
             with open(user_filters_path, "r") as f:
                 user_filters_json = json.load(f)
                 self.user_filters = {
-                    await self.bot.fetch_user(user_id): [Filter.from_json(filter) for filter in filters]
+                    await self.bot.fetch_user(user_id): [
+                        Filter.from_json(filter) for filter in filters
+                    ]
                     for user_id, filters in user_filters_json.items()
                 }
-                total_filters = sum(len(filters) for filters in self.user_filters.values())
-                print(f"Loaded {total_filters} filters for {len(self.user_filters)} users.") 
+                total_filters = sum(
+                    len(filters) for filters in self.user_filters.values()
+                )
+                print(
+                    f"Loaded {total_filters} filters for {len(self.user_filters)} users."
+                )
         except json.JSONDecodeError:
-            print(f"Error loading filters from {USER_FILTERS_PATH}. Using empty filters.")
+            print(
+                f"Error loading filters from {USER_FILTERS_PATH}. Using empty filters."
+            )
             self.user_filters = {}
 
-        # Check folder "map_icons" exists next to the script, if not create it then download the map icons using https://cdn.gametools.network/maps/battlebit/{map_name}.jpg using gather
         map_icons_dir = os.path.join(main_dir, "map_icons")
         if not os.path.exists(map_icons_dir):
             os.mkdir(map_icons_dir)
 
-        map_icons = [map for map in constants.game_maps if not os.path.exists(os.path.join(map_icons_dir, f"{map}.jpg"))]
+        map_icons = [
+            map
+            for map in constants.MAPS
+            if not os.path.exists(os.path.join(map_icons_dir, f"{map}.jpg"))
+        ]
         await asyncio.gather(*[self.download_map_icon(map) for map in map_icons])
 
         await asyncio.gather(fetch_notify_task)
@@ -217,30 +241,34 @@ class Notifier(commands.Cog):
 
     def add_filter(self, user: discord.User, filter: Filter) -> None:
         self.user_filters.setdefault(user, []).append(filter)
-        
+
         main_dir = os.path.dirname(os.path.abspath(__file__))
         user_filters_path = os.path.join(main_dir, USER_FILTERS_PATH)
 
         with open(user_filters_path, "w") as f:
-            user_filters = {str(user.id): [filter.to_json() for filter in filters] for user, filters in self.user_filters.items()}
+            user_filters = {
+                str(user.id): [filter.to_json() for filter in filters]
+                for user, filters in self.user_filters.items()
+            }
             json.dump(user_filters, f)
 
     def remove_filter(self, user: discord.User, filter_index: int) -> None:
         if user in self.user_filters:
             if filter_index < len(self.user_filters[user]):
                 del self.user_filters[user][filter_index]
-        
+
         main_dir = os.path.dirname(os.path.abspath(__file__))
         user_filters_path = os.path.join(main_dir, USER_FILTERS_PATH)
 
         with open(user_filters_path, "w") as f:
-            user_filters = {str(user.id): [filter.to_json() for filter in filters] for user, filters in self.user_filters.items()}
+            user_filters = {
+                str(user.id): [filter.to_json() for filter in filters]
+                for user, filters in self.user_filters.items()
+            }
             json.dump(user_filters, f)
 
     def get_filters_for_user(self, user: discord.User) -> list[Filter]:
         return self.user_filters.get(user, [])
-
-
 
     def clear_filters(self, user: discord.User) -> None:
         self.user_filters.pop(user, None)

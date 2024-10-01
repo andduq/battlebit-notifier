@@ -1,4 +1,4 @@
-regions = [
+REGIONS = [
     "Any",
     "America_Central",
     "Europe_Central",
@@ -8,7 +8,7 @@ regions = [
     "Japan_Central",
 ]
 
-game_maps = [
+MAPS = [
     "Any",
     "Azagor",
     "Basra",
@@ -34,7 +34,7 @@ game_maps = [
     "ZalfiBay",
 ]
 
-gamemodes = [
+GAMEMODES = [
     "Any", 
     "CONQ", 
     "INFCONQ", 
