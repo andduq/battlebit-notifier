@@ -77,14 +77,15 @@ class Leaderboard(commands.Cog):
         message = f"```{table}\nLast updated {time.strftime('%Y-%m-%d %H:%M:%S', self.last_fetch.timetuple())}```"
 
         try:
-            await ctx.send_response(message)
+            await ctx.send_response(message, delete_after=120)
         except discord.HTTPException:
             with open("leaderboard.txt", "w", encoding="utf-8-sig") as f:
                 f.write(table)
             with open("leaderboard.txt", "rb") as f:
                 await ctx.send_response(
                     "Leaderboard is too long, sending as a file",
-                    file=discord.File(f, "leaderboard.txt")
+                    file=discord.File(f, "leaderboard.txt"),
+                    delete_after=120
                 )
                 os.remove("leaderboard.txt")
 
