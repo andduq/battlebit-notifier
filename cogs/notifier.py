@@ -12,7 +12,8 @@ from filter import Filter
 
 SERVER_LIST_URL = "https://publicapi.battlebit.cloud/Servers/GetServerList"
 USER_FILTERS_PATH = "user_filters.json"
-
+SERVER_FETCH_RETRY_INTERVAL = 5
+SERVER_FETCH_RETRY_COUNT = 3
 
 class Notifier(commands.Cog):
     server_list = []
@@ -94,12 +95,24 @@ class Notifier(commands.Cog):
         )
 
     async def fetch_server_list(self) -> None:
-        async with self.session.get(SERVER_LIST_URL) as response:
-            self.server_list = await response.json(
-                content_type=None, encoding="utf-8-sig"
-            )
-            print(f"Fetched {len(self.server_list)} servers, status: {response.status}")
+        retry_count = 0
+        while retry_count < SERVER_FETCH_RETRY_COUNT:
+            try:
+                async with self.session.get(SERVER_LIST_URL) as response:
+                    self.server_list = await response.json(
+                        content_type=None, encoding="utf-8-sig"
+                    )
+                    print(f"Fetched {len(self.server_list)} servers, status: {response.status}")
+                    return
+            except Exception as e:
+                print(f"Failed to fetch server list ({retry_count}/{SERVER_FETCH_RETRY_COUNT}): {e}")
+                retry_count += 1
+                await asyncio.sleep(SERVER_FETCH_RETRY_INTERVAL)
 
+        await self.bot.change_presence(
+            activity=discord.Game(name=f"Not feeling so good...")
+        )
+        
     def set_user_filters(self, user_filters: dict[discord.User, list[Filter]]) -> None:
         self.user_filters = user_filters
 
