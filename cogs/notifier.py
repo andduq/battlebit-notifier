@@ -10,6 +10,9 @@ import discord
 from discord.ext import commands
 from filter import Filter
 
+
+DEBUG_WEBHOOK_URL = os.getenv("DEBUG_WEBHOOK_URL")
+
 SERVER_LIST_URL = "https://publicapi.battlebit.cloud/Servers/GetServerList"
 USER_FILTERS_PATH = "user_filters.json"
 SERVER_FETCH_RETRY_INTERVAL = 5
@@ -109,9 +112,10 @@ class Notifier(commands.Cog):
                 retry_count += 1
                 await asyncio.sleep(SERVER_FETCH_RETRY_INTERVAL)
 
-        await self.bot.change_presence(
-            activity=discord.Game(name=f"Not feeling so good...")
-        )
+        if DEBUG_WEBHOOK_URL:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(DEBUG_WEBHOOK_URL, json={"content": f"Failed to fetch server list after {SERVER_FETCH_RETRY_COUNT} retries."}) as response:
+                    print(f"Sent message to debug webhook, status: {response.status}")
         
     def set_user_filters(self, user_filters: dict[discord.User, list[Filter]]) -> None:
         self.user_filters = user_filters
