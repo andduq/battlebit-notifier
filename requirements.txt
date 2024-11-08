@@ -1,6 +1,6 @@
 aiohttp
 py-cord
-googletrans
+deep_translator
 python-dotenv
 Requests
 table2ascii
