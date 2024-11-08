@@ -33,6 +33,7 @@ async def main():
 
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.reactions = True
 
     async with ClientSession() as session:
         bot = CustomBot(
