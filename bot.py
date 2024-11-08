@@ -18,6 +18,7 @@ class CustomBot(commands.Bot):
         cogs_list = [
             'notifier',
             'leaderboard'
+            'translator',
         ]
 
         for cog in cogs_list:
