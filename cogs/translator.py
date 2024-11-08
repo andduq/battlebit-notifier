@@ -9,15 +9,60 @@ class Translator(commands.Cog):
         self.bot = bot
 
         self.flag_to_language = {
-            "🇺🇸": "en",
-            "🇫🇷": "fr",
-            "🇪🇸": "es",
-            "🇩🇪": "de",
-            "🇮🇹": "it",
-            "🇷🇺": "ru",
-            "🇨🇳": "zh-CN",
-            "🇯🇵": "ja",
+            "🇿🇦": "af",  # Afrikaans
+            "🇦🇱": "sq",  # Albanian
+            "🇪🇹": "am",  # Amharic
+            "🇸🇦": "ar",  # Arabic
+            "🇦🇲": "hy",  # Armenian
+            "🇦🇿": "az",  # Azerbaijani
+            "🇧🇾": "be",  # Belarusian
+            "🇧🇩": "bn",  # Bengali
+            "🇧🇦": "bs",  # Bosnian
+            "🇧🇬": "bg",  # Bulgarian
+            "🇪🇸": "ca",  # Catalan
+            "🇨🇳": "zh-CN",  # Chinese Simplified
+            "🇭🇷": "hr",  # Croatian
+            "🇨🇿": "cs",  # Czech
+            "🇩🇰": "da",  # Danish
+            "🇳🇱": "nl",  # Dutch
+            "🇺🇸": "en",  # English
+            "🇪🇪": "et",  # Estonian
+            "🇫🇮": "fi",  # Finnish
+            "🇫🇷": "fr",  # French
+            "🇩🇪": "de",  # German
+            "🇬🇷": "el",  # Greek
+            "🇭🇹": "ht",  # Haitian Creole
+            "🇮🇱": "iw",  # Hebrew
+            "🇮🇳": "hi",  # Hindi
+            "🇭🇺": "hu",  # Hungarian
+            "🇮🇸": "is",  # Icelandic
+            "🇮🇩": "id",  # Indonesian
+            "🇮🇪": "ga",  # Irish
+            "🇮🇹": "it",  # Italian
+            "🇯🇵": "ja",  # Japanese
+            "🇰🇿": "kk",  # Kazakh
+            "🇰🇷": "ko",  # Korean
+            "🇱🇻": "lv",  # Latvian
+            "🇱🇹": "lt",  # Lithuanian
+            "🇲🇾": "ms",  # Malay
+            "🇳🇴": "no",  # Norwegian
+            "🇵🇱": "pl",  # Polish
+            "🇧🇷": "pt",  # Portuguese
+            "🇷🇴": "ro",  # Romanian
+            "🇷🇺": "ru",  # Russian
+            "🇷🇸": "sr",  # Serbian
+            "🇸🇰": "sk",  # Slovak
+            "🇸🇮": "sl",  # Slovenian
+            "🇪🇸": "es",  # Spanish
+            "🇸🇪": "sv",  # Swedish
+            "🇹🇭": "th",  # Thai
+            "🇹🇷": "tr",  # Turkish
+            "🇺🇦": "uk",  # Ukrainian
+            "🇵🇰": "ur",  # Urdu
+            "🇻🇳": "vi",  # Vietnamese
+            "🇿🇦": "zu",  # Zulu
         }
+
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
