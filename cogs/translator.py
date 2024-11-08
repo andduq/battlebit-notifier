@@ -8,7 +8,6 @@ class Translator(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Mapping of emoji flags to language codes
         self.flag_to_language = {
             "🇺🇸": "en",
             "🇫🇷": "fr",
@@ -43,12 +42,10 @@ class Translator(commands.Cog):
             original_author = message.author
 
             try:
-                # Translate the message using deep-translator
                 translated_text = GoogleTranslator(
                     source="auto", target=language_code
                 ).translate(original_message)
 
-                # Create an embed with the translation            
                 embed = discord.Embed(
                     description=translated_text,
                     color=discord.Color.blue(),
@@ -63,8 +60,6 @@ class Translator(commands.Cog):
             except Exception as e:
                 print(f"Translation error: {e}")
                 await channel.send("An error occurred while translating the message. Exception: {e}")
-        else:
-            await message.remove_reaction(emoji, payload.member)
 
 def setup(bot):
     bot.add_cog(Translator(bot))
