@@ -17,7 +17,7 @@ class CustomBot(commands.Bot):
         self.testing_guild_id = testing_guild_id
         cogs_list = [
             'notifier',
-            'leaderboard'
+            'leaderboard',
             'translator',
         ]
 
