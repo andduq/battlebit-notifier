@@ -9,12 +9,10 @@ class CustomBot(commands.Bot):
         self,
         *args,
         web_session: ClientSession,
-        testing_guild_id: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.web_session = web_session
-        self.testing_guild_id = testing_guild_id
         cogs_list = [
             'notifier',
             'leaderboard',

@@ -1,6 +1,7 @@
 aiohttp
 py-cord
 deep_translator
+firebase_admin
 python-dotenv
 Requests
 table2ascii
