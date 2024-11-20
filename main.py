@@ -11,8 +11,6 @@ import sys
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = os.getenv("GUILD_ID")
-
 
 async def main():
     logger = logging.getLogger()

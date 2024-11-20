@@ -17,6 +17,7 @@ class CustomBot(commands.Bot):
             'notifier',
             'leaderboard',
             'translator',
+            'guildevents',
         ]
 
         for cog in cogs_list:
