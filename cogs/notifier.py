@@ -128,23 +128,29 @@ class Notifier(commands.Cog):
 
     async def send_notification(self, user: discord.User, server: dict):
         """Send a DM to the user with server details."""
+        formatted_server_name = self.format_server_name(server["Name"])
+        region_flag = self.get_region_flag(server["Region"])
+        queue_str = f"(+{server['QueuePlayers']})" if server["QueuePlayers"] > 0 else ""
         embed = discord.Embed(
             title="Server Match Found",
-            description=f"<@{user.id}>, a server matching your filters is available!",
-            color=discord.Color.yellow()
+            description=f"<@{user.id}>, a server has been found matching your criterias.",
+            color=discord.Color.yellow(),
         )
         embed.add_field(
-            name=server["Name"],
-            value=f"**Players**: {server['Players']} / {server['MaxPlayers']}\n"
-                  f"**Map**: {server['Map']}\n"
-                  f"**Region**: {self.get_region_flag(server['Region'])}\n"
-                  f"**Gamemode**: {server['Gamemode']}",
-            inline=False
+            name=formatted_server_name,
+            value=f"**Players**: {server['Players']}{queue_str}/{server['MaxPlayers']}\n**Map**: {server['Map']}\n**Region**: {region_flag}\n**Gamemode**: {server['Gamemode']}",
+            inline=False,
         )
+        main_dir = os.path.dirname(os.path.abspath(__file__))
+        map_icon_path = os.path.join(main_dir, "map_icons", f"{server['Map']}.jpg")
+        if os.path.exists(map_icon_path):
+            file = discord.File(map_icon_path, filename=f"{server['Map']}.jpg")
+            embed.set_thumbnail(url=f"attachment://{server['Map']}.jpg")
+
         embed.timestamp = discord.utils.utcnow()
 
         try:
-            await user.send(embed=embed)
+            await user.send(embed=embed, file=file)
             log.info(f"Notification sent to {user.name} for server {server['Name']}.")
         except discord.Forbidden:
             log.warning(f"Cannot send DM to {user.name}.")
