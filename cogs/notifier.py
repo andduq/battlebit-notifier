@@ -9,6 +9,7 @@ from filter import Filter
 from firestore_helper import get_firestore_client
 import constants
 import re
+from bot import CustomBot
 
 DEBUG_WEBHOOK_URL = os.getenv("DEBUG_WEBHOOK_URL")
 SERVER_LIST_URL = "https://publicapi.battlebit.cloud/Servers/GetServerList"
@@ -20,10 +21,10 @@ log = logging.getLogger("Notifier")
 
 
 class Notifier(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: CustomBot):
         self.bot = bot
         self.server_list: List[dict] = []  # List of server data
-        self.session: aiohttp.ClientSession = None
+        self.session: aiohttp.ClientSession = bot.web_session
         self.sent_notifications: Dict[int, set[int]] = {}  # user_id -> set of server ids
         self.user_filters: Dict[str, Dict[str, List[Filter]]] = {}  # guild_id -> user_id -> list of Filters
         self.db = get_firestore_client()
@@ -31,16 +32,9 @@ class Notifier(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         log.info("Bot is ready.")
-        self.session = aiohttp.ClientSession()
         await self.preload_filters()
         await self.fetch_map_icons()
         asyncio.create_task(self.fetch_and_notify())
-
-    @commands.Cog.listener()
-    async def on_disconnect(self):
-        if self.session:
-            await self.session.close()
-            log.info("Session closed on bot disconnect.")
 
     @commands.guild_only()
     @discord.slash_command(name="start_notify", description="Get notified for matching servers.")
@@ -108,9 +102,8 @@ class Notifier(commands.Cog):
         
         log.error("Max retries reached. Could not fetch server list.")
         if DEBUG_WEBHOOK_URL:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(DEBUG_WEBHOOK_URL, json={"content": f"Failed to fetch server list after {SERVER_FETCH_RETRY_COUNT} retries."}) as response:
-                    log.info(f"Sent message to debug webhook, status: {response.status}")
+            async with self.session.post(DEBUG_WEBHOOK_URL, json={"content": f"Failed to fetch server list after {SERVER_FETCH_RETRY_COUNT} retries."}) as response:
+                log.info(f"Sent message to debug webhook, status: {response.status}")
 
     async def fetch_and_notify(self):
         """Fetch server list periodically and notify users of matches."""
