@@ -125,6 +125,13 @@ class Notifier(commands.Cog):
                             user = await self.bot.fetch_user(user_id)
                             await self.send_notification(user, server)
                             self.sent_notifications[int(user_id)].add(server_id)
+                            
+        # Create a new set that contains every server ID in the current server list
+        current_server_ids = {server["Id"] for server in self.server_list}
+        # Update the sent_notifications dictionary to only include server IDs that are still in the server list (removing invalid server IDs due to map change)
+        for user, sent_ids in self.sent_notifications.items():
+            still_valid_servers = sent_ids & current_server_ids
+            self.sent_notifications[user] = still_valid_servers
 
     async def send_notification(self, user: discord.User, server: dict):
         """Send a DM to the user with server details."""
@@ -152,8 +159,8 @@ class Notifier(commands.Cog):
         try:
             await user.send(embed=embed, file=file)
             log.info(f"Notification sent to {user.name} for server {server['Name']}.")
-        except discord.Forbidden:
-            log.warning(f"Cannot send DM to {user.name}.")
+        except Exception as e:
+            log.warning(f"Cannot send DM to {user.name}. Exception: {e}")	
 
     def format_server_name(self, server_name: str) -> str:
         """Sanitize server name to exclude URLs."""
