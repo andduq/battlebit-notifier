@@ -1,4 +1,3 @@
-import discord
 from discord.ext import commands
 from aiohttp import ClientSession
 from typing import Optional
@@ -14,10 +13,10 @@ class CustomBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.web_session = web_session
         cogs_list = [
-            'notifier',
+            'map_detector',
             'leaderboard',
             'translator',
-            'guildevents',
+            'notifier',
         ]
 
         for cog in cogs_list:

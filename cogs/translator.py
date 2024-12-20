@@ -3,9 +3,10 @@ from discord.ext import commands, tasks
 from deep_translator import GoogleTranslator
 from deep_translator.exceptions import NotValidPayload, LanguageNotSupportedException
 import time
+from bot import CustomBot
 
 class Translator(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: CustomBot):
         self.bot = bot
         self.emoji_to_language = self.get_language_emoji_mapping()
         self.processed_reactions = {}
@@ -135,5 +136,5 @@ class Translator(commands.Cog):
     async def before_cleanup_task(self):
         await self.bot.wait_until_ready()
 
-def setup(bot):
+def setup(bot : CustomBot) -> None:
     bot.add_cog(Translator(bot))

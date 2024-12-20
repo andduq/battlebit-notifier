@@ -1,7 +1,7 @@
 import json
 import requests
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import time
 from typing import List
 import aiohttp
@@ -9,20 +9,29 @@ from bot import CustomBot
 from datetime import datetime
 from table2ascii import table2ascii as t2a, PresetStyle
 import os
+import logging
+from typing import Tuple
+from firestore_helper import get_firestore_client
 
 LEADERBOARD_URL = "https://publicapi.battlebit.cloud/Leaderboard/Get"
-
+log = logging.getLogger("Leaderboard")
 
 class Leaderboard(commands.Cog):
     bot: CustomBot
     last_fetch: datetime
     last_cached_leaderboard: List[dict] = None
     cached_leaderboard: List[dict] = None
-
+    db = get_firestore_client()
     def __init__(self, bot: CustomBot):
         self.bot = bot
-        self.last_fetch = datetime.now()
 
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self.db.collection("clan").document("statistics").get().to_dict().get("global_rank"):
+            self.db.collection("clan").document("statistics").set({"global_rank": 0})
+        
+        self.fetch_leaderboard_loop.start()
+        
     @commands.guild_only()
     @commands.slash_command(
         name="topclans",
@@ -30,8 +39,7 @@ class Leaderboard(commands.Cog):
     )
     async def leaderboard(
         self, ctx: discord.ApplicationContext, n: int = 10, min_players: int = 3
-    ):
-        await self.fetch_leaderboard()
+    ) -> None:
         top_clans = self.cached_leaderboard[0]["TopClans"]
 
         cleaned_data = [
@@ -74,7 +82,7 @@ class Leaderboard(commands.Cog):
             style=PresetStyle.thin_compact,
         )
 
-        message = f"```{table}\nLast updated {time.strftime('%Y-%m-%d %H:%M:%S', self.last_fetch.timetuple())}```"
+        message = f"```{table}\nLast updated {(datetime.now() - self.last_fetch).seconds} seconds ago```"
 
         try:
             await ctx.send_response(message, delete_after=120)
@@ -89,7 +97,7 @@ class Leaderboard(commands.Cog):
                 )
                 os.remove("leaderboard.txt")
 
-    def get_arrow_and_prev_xp_per_player(self, clan):
+    def get_arrow_and_prev_xp_per_player(self, clan) -> Tuple[str, float]:
         prev_xp_per_player = 0
         if self.last_cached_leaderboard is not None:
             for old_clan in self.last_cached_leaderboard[0]["TopClans"]:
@@ -104,16 +112,11 @@ class Leaderboard(commands.Cog):
     def format_number(self, num):
         return f"{float(num):,.2f}"
 
-    async def fetch_leaderboard(self):
-        if (
-            self.cached_leaderboard is not None
-            and (datetime.now() - self.last_fetch).seconds < 60
-        ):
-            return
-
+    @tasks.loop(seconds=5)
+    async def fetch_leaderboard_loop(self) -> None:
         async with self.bot.web_session.get(LEADERBOARD_URL) as response:
             if response.status != 200:
-                print(f"Failed to fetch leaderboard: {response.status}")
+                log.error(f"Failed to fetch leaderboard: {response.status}")
                 return
 
             leaderboard = json.loads(await response.text(encoding="utf-8-sig"))
@@ -126,6 +129,15 @@ class Leaderboard(commands.Cog):
 
             self.last_fetch = datetime.now()
 
+        top_clans = leaderboard[0]["TopClans"]
+        previous_rank = self.db.collection("clan").document("statistics").get().to_dict().get("global_rank", 0)
+        for rank, clan in enumerate(top_clans):
+            if clan["Tag"] == "1S1K":
+                new_rank = rank + 1
+                if new_rank != previous_rank:
+                    self.bot.dispatch("1s1k_rank_change", previous_rank, new_rank)
+                    self.db.collection("clan").document("statistics").set({"global_rank": new_rank})
 
-def setup(bot):
+
+def setup(bot : CustomBot) -> None:
     bot.add_cog(Leaderboard(bot))

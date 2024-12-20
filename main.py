@@ -37,7 +37,7 @@ async def main():
     
     intents = discord.Intents.default()
     intents.message_content = True
-    intents.reactions = True
+    intents.guild_reactions = True
     intents.guilds = True
 
     async with ClientSession() as session:
