@@ -4,6 +4,9 @@ from deep_translator import GoogleTranslator
 from deep_translator.exceptions import NotValidPayload, LanguageNotSupportedException
 import time
 from bot import CustomBot
+import logging
+
+log = logging.getLogger("Translator")
 
 class Translator(commands.Cog):
     def __init__(self, bot: CustomBot):
@@ -12,6 +15,10 @@ class Translator(commands.Cog):
         self.processed_reactions = {}
         self.reaction_timeout_seconds = 60 * 5 # 5 minutes
         self.cleanup_task.start()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        log.info("Translator cog is ready")
 
     def get_language_emoji_mapping(self):
         return {

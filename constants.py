@@ -1,5 +1,4 @@
 REGIONS = [
-    "Any",
     "America_Central",
     "Europe_Central",
     "Asia_Central",
@@ -9,7 +8,6 @@ REGIONS = [
 ]
 
 MAPS = [
-    "Any",
     "Azagor",
     "Basra",
     "Construction",
@@ -35,11 +33,18 @@ MAPS = [
 ]
 
 GAMEMODES = [
-    "Any", 
     "CONQ", 
     "INFCONQ", 
     "FRONTLINE", 
     "DOMI", 
     "RUSH", 
     "CaptureTheFlag"
+]
+
+MAX_PLAYERS = [
+    16,
+    32,
+    64,
+    128,
+    254
 ]

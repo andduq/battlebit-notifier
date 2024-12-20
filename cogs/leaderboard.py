@@ -17,20 +17,24 @@ LEADERBOARD_URL = "https://publicapi.battlebit.cloud/Leaderboard/Get"
 log = logging.getLogger("Leaderboard")
 
 class Leaderboard(commands.Cog):
-    bot: CustomBot
-    last_fetch: datetime
-    last_cached_leaderboard: List[dict] = None
-    cached_leaderboard: List[dict] = None
-    db = get_firestore_client()
     def __init__(self, bot: CustomBot):
-        self.bot = bot
+        self.bot : CustomBot = bot
+        self.last_fetch: datetime
+        self.last_cached_leaderboard: List[dict] = None
+        self.cached_leaderboard: List[dict] = None
+        self.db = get_firestore_client()
+        self.notification_channel : discord.TextChannel = None
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        log.info("Leaderboard cog is ready")
+        self.notification_channel = await self.bot.get_notification_channel()
+
         if not self.db.collection("clan").document("statistics").get().to_dict().get("global_rank"):
             self.db.collection("clan").document("statistics").set({"global_rank": 0})
         
         self.fetch_leaderboard_loop.start()
+        
         
     @commands.guild_only()
     @commands.slash_command(
@@ -135,8 +139,40 @@ class Leaderboard(commands.Cog):
             if clan["Tag"] == "1S1K":
                 new_rank = rank + 1
                 if new_rank != previous_rank:
-                    self.bot.dispatch("1s1k_rank_change", previous_rank, new_rank)
                     self.db.collection("clan").document("statistics").set({"global_rank": new_rank})
+                    try:
+                        rank_difference = abs(new_rank - previous_rank)
+                        improved = new_rank < previous_rank
+                        direction = "⬆️" if improved else "⬇️"
+                        change_str = f"{direction} `{'+' if improved else '-'}{rank_difference}`"
+                        embed = discord.Embed(
+                            title="🌟 Global Rank Update 🌟",
+                            description=(
+                                f"1S1K's global rank has **{'improved' if improved else 'dropped'}**!"
+                            ),
+                            color=discord.Color.green() if improved else discord.Color.red(),
+                            timestamp=discord.utils.utcnow(),
+                        )
+                        embed.add_field(
+                            name="Previous Rank",
+                            value=f"`#{previous_rank}`",
+                            inline=True
+                        )
+                        embed.add_field(
+                            name="New Rank",
+                            value=f"`#{new_rank}`",
+                            inline=True
+                        )
+                        embed.add_field(
+                            name="Change",
+                            value=change_str,
+                            inline=False
+                        )
+
+                        await self.notification_channel.send(":loudspeaker: • @everyone", embed=embed)
+                            
+                    except Exception as e:
+                        log.warning(f"Cannot send notification to channel {self.notification_channel}. Exception: {e}")
 
 
 def setup(bot : CustomBot) -> None:
