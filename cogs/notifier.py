@@ -173,7 +173,7 @@ class Notifier(commands.Cog):
             
             try:
                 await self.notification_channel.send(
-                    content=f":loudspeaker: • {mentions}",
+                    content=f"{server['Map']}/{server['Gamemode']} • {mentions}",
                     embed=embed,
                     file=file
                 )
