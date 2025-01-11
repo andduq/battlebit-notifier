@@ -157,9 +157,12 @@ class Notifier(commands.Cog):
                 description="A server has been found matching your criterias.",
                 color=discord.Color.yellow(),
             )
+            daynight_str = "☀️ Day" if server["DayNight"] == "Day" else "🌙 Night"
+            region_str = f"{region_flag} {server['Region']}"
+            players_str = f"{server['Players']}{queue_str}/{server['MaxPlayers']}"
             embed.add_field(
                 name=formatted_server_name,
-                value=f"**Players**: {server['Players']}{queue_str}/{server['MaxPlayers']}\n**Map**: {server['Map']}\n**Region**: {region_flag}\n**Gamemode**: {server['Gamemode']}",
+                value=f"**Players**: {players_str}\n**Map**: {server['Map']}\n**Day/Night**: {daynight_str}\n**Region**: {region_str}\n**Gamemode**: {server['Gamemode']}",
                 inline=False,
             )
             main_dir = os.path.dirname(os.path.abspath(__file__))

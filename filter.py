@@ -18,7 +18,7 @@ class Filter:
     def apply(self, server) -> bool:
         conditions = []
         if self.min_players is not None:
-            conditions.append(int(server["Players"]) >= self.min_players)
+            conditions.append(int(server["Players"]) + int(server["QueuePlayers"]) >= self.min_players)
         if self.max_players is not None:
             conditions.append(int(server["MaxPlayers"]) >= self.max_players)
         if self.region is not None:
