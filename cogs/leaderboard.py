@@ -86,21 +86,19 @@ class Leaderboard(commands.Cog):
             style=PresetStyle.thin_compact,
         )
 
-        message = f"```{table}\nLast updated {(datetime.now() - self.last_fetch).seconds} seconds ago```"
+        message = f"```{table}```"
 
         try:
-            await ctx.send_response(message, delete_after=120)
+            await ctx.send_response(message)
         except discord.HTTPException:
+            if os.path.exists("leaderboard.txt"):
+                os.remove("leaderboard.txt")
             with open("leaderboard.txt", "w", encoding="utf-8-sig") as f:
-                f.write(table)
+                f.write(message)
             with open("leaderboard.txt", "rb") as f:
                 await ctx.send_response(
                     "Leaderboard is too long, sending as a file",
-                    file=discord.File(f, "leaderboard.txt"),
-                    delete_after=120
-                )
-                os.remove("leaderboard.txt")
-
+                    file=discord.File(f, "leaderboard.txt"))
     def get_arrow_and_prev_xp_per_player(self, clan) -> Tuple[str, float]:
         prev_xp_per_player = 0
         if self.last_cached_leaderboard is not None:
