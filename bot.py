@@ -19,6 +19,7 @@ class CustomBot(commands.Bot):
             'leaderboard',
             'translator',
             'notifier',
+            'profile-creator',
         ]
 
         for cog in cogs_list:
