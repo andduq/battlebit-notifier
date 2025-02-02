@@ -10,6 +10,7 @@ import json
 import os
 from google.cloud import storage
 from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import DocumentSnapshot
 import re
 
 log = logging.getLogger("ProfileCreator")
@@ -17,6 +18,9 @@ log = logging.getLogger("ProfileCreator")
 PROFILE_SCHEMA = {
     "bio": str,
     "accent_color": str,
+    "twitter_profile_url" : str,
+    "youtube_profile_url" : str,
+    "twitch_profile_url" : str,
     "stats": {
         "m200_kills": int,
         "l96_kills": int,
@@ -36,6 +40,9 @@ PROFILE_SCHEMA = {
 PROFILE_SCHEMA_STR = {
     "bio": "str",
     "accent_color": "str",
+    "twitter_profile_url" : "str",
+    "youtube_profile_url" : "str",
+    "twitch_profile_url" : "str",
     "stats": {
         "m200_kills": "int",
         "l96_kills": "int",
@@ -56,6 +63,9 @@ PROFILE_SCHEMA_STR = {
 PROFILE_EXAMPLE = {
     "bio": "Super awesome bio",
     "accent_color": "#FF0000",
+    "twitter_profile_url" : "https://twitter.com/username or nothing",
+    "youtube_profile_url" : "https://www.youtube.com/channel/username or nothing",
+    "twitch_profile_url" : "https://www.twitch.tv/username or nothing",
     "stats": {
         "m200_kills": 100,
         "l96_kills": 50,
@@ -165,7 +175,7 @@ class ProfileCreator(commands.Cog):
             log.error(f"Validation error: {e}")
             return False, [str(e)]
 
-    async def get_user_profile(self, discord_id: int) -> Optional[dict]:
+    async def get_user_profile(self, discord_id: int) -> Optional[DocumentSnapshot]:
         """Gets a user's profile from Firestore."""
         try:
             profile_ref = self.db.collection(COLLECTION_NAME).where(
@@ -231,6 +241,7 @@ class ProfileCreator(commands.Cog):
             profile_data.update({
                 "steam_id": steam_id,
                 "discord_id": ctx.author.id,
+                "discord_ursername": ctx.author.name,
                 "banner_url": "",
                 "soundtrack_url": ""
             })
@@ -261,7 +272,7 @@ class ProfileCreator(commands.Cog):
             await ctx.followup.send("❌ Profile not found.")
             return
 
-        prompt_msg = await ctx.send("Please upload your profile update JSON file.")
+        prompt_msg = await ctx.send("Please upload your updated profile JSON file.")
         await self._track_message(ctx, prompt_msg)
 
         try:
@@ -292,7 +303,10 @@ class ProfileCreator(commands.Cog):
                 return
 
             # Update profile
-            profile_ref[0].reference.update(update_data)
+            profile_ref.reference.update(update_data)
+
+            # Update discord username in case it changed
+            profile_ref.reference.update({"discord_username": ctx.author.name})
 
             # Clean up messages and send final confirmation
             await self._cleanup_command_messages(ctx)
