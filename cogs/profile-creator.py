@@ -543,5 +543,96 @@ class ProfileCreator(commands.Cog):
             log.error(f"Error updating profile: {e}")
             await ctx.followup.send("❌ An error occurred while updating the profile.")
 
+    @commands.guild_only()
+    @has_role("Admin")
+    @commands.slash_command(
+        name="admin-update-banner",
+        description="Admin command to update banner for any profile using Steam ID"
+    )
+    @option("steam_id", "Steam ID of the profile", required=True, type=str)
+    async def admin_update_banner(self, ctx: discord.ApplicationContext, steam_id: str) -> None:
+        """Updates the banner for any profile (Admin only)."""
+        await ctx.defer()
+        await self._handle_admin_file_upload(ctx, steam_id, "banner", ALLOWED_IMAGE_TYPES)
+
+    @commands.guild_only()
+    @has_role("Admin")
+    @commands.slash_command(
+        name="admin-update-soundtrack",
+        description="Admin command to update soundtrack for any profile using Steam ID"
+    )
+    @option("steam_id", "Steam ID of the profile", required=True, type=str)
+    async def admin_update_soundtrack(self, ctx: discord.ApplicationContext, steam_id: str) -> None:
+        """Updates the soundtrack for any profile (Admin only)."""
+        await ctx.defer()
+        await self._handle_admin_file_upload(ctx, steam_id, "soundtrack", ALLOWED_AUDIO_TYPES)
+
+    async def _handle_admin_file_upload(self, ctx: discord.ApplicationContext, steam_id: str, file_type: str, allowed_types: list) -> None:
+        """Handles admin file uploads for profile updates using Steam ID."""
+        if not self.validate_steam_id(steam_id):
+            await ctx.followup.send("❌ Invalid Steam ID format. Must be 17 digits.")
+            return
+
+        profile_ref = self.db.collection(COLLECTION_NAME).document(steam_id).get()
+        if not profile_ref.exists:
+            await ctx.followup.send("❌ Profile not found.")
+            return
+
+        prompt_msg = await ctx.send(f"Please upload the {file_type} file:")
+        await self._track_message(ctx, prompt_msg)
+
+        try:
+            msg = await self.bot.wait_for(
+                "message",
+                timeout=TIMEOUT_SECONDS,
+                check=lambda m: m.author == ctx.author and m.attachments
+            )
+            await self._track_message(ctx, msg)
+
+            if not msg.attachments:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ No file attached.")
+                return
+
+            file = msg.attachments[0]
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in allowed_types:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send(f"❌ Invalid file type. Allowed types: {', '.join(allowed_types)}")
+                return
+
+            # Upload to Storage bucket with consistent naming
+            blob_path = f"{steam_id}/{file_type}{ext}"
+            
+            # Delete old file if it exists
+            for old_ext in allowed_types:
+                old_blob = self.bucket.blob(f"{steam_id}/{file_type}{old_ext}")
+                if old_blob.exists():
+                    old_blob.delete()
+            
+            # Upload new file
+            blob = self.bucket.blob(blob_path)
+            file_data = await file.read()
+            blob.upload_from_string(file_data)
+            blob.make_public()
+
+            # Update profile with new URL and timestamp
+            profile_ref.reference.update({
+                f"{file_type}_url": blob.public_url,
+                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+            })
+
+            # Clean up messages and send final confirmation
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send(f"✅ {file_type.capitalize()} updated successfully for Steam ID: {steam_id}!")
+
+        except TimeoutError:
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send("❌ Upload timed out.")
+        except Exception as e:
+            await self._cleanup_command_messages(ctx)
+            log.error(f"Error handling file upload: {e}")
+            await ctx.followup.send("❌ An error occurred while processing your file.")
+
 def setup(bot: CustomBot):
     bot.add_cog(ProfileCreator(bot))
