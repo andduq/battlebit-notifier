@@ -15,7 +15,7 @@ import re
 from discord.ext.commands import has_role
 import tempfile
 from datetime import timezone 
-import datetime 
+from datetime import datetime
 
 log = logging.getLogger("ProfileCreator")
 
@@ -25,6 +25,7 @@ PROFILE_SCHEMA = {
     "twitter_profile_url" : str,
     "youtube_profile_url" : str,
     "twitch_profile_url" : str,
+    "join_date": int,  # Unix timestamp
     "stats": {
         "m200_kills": int,
         "l96_kills": int,
@@ -47,6 +48,7 @@ PROFILE_SCHEMA_STR = {
     "twitter_profile_url" : "str",
     "youtube_profile_url" : "str",
     "twitch_profile_url" : "str",
+    "join_date": "int",  # Unix timestamp
     "stats": {
         "m200_kills": "int",
         "l96_kills": "int",
@@ -70,6 +72,7 @@ PROFILE_EXAMPLE = {
     "twitter_profile_url" : "https://twitter.com/username or nothing",
     "youtube_profile_url" : "https://www.youtube.com/channel/username or nothing",
     "twitch_profile_url" : "https://www.twitch.tv/username or nothing",
+    "join_date": 1672531200,  # Example: Jan 1, 2023 00:00:00 UTC
     "stats": {
         "m200_kills": 100,
         "l96_kills": 50,
@@ -137,6 +140,15 @@ class ProfileCreator(commands.Cog):
         try:
             if not isinstance(data, dict):
                 return False, ["Invalid data format"]
+
+            # Validate join_date
+            if "join_date" in data:
+                if not isinstance(data["join_date"], int):
+                    errors.append("join_date must be an integer (Unix timestamp)")
+                elif data["join_date"] < 0:
+                    errors.append("join_date cannot be negative")
+                elif data["join_date"] > int(datetime.now(timezone.utc).timestamp()):
+                    errors.append("join_date cannot be in the future")
 
             # Validate bio
             if "bio" in data:
