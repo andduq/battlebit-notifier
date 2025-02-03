@@ -12,6 +12,7 @@ from google.cloud import storage
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import DocumentSnapshot
 import re
+from discord.ext.commands import has_role
 
 log = logging.getLogger("ProfileCreator")
 
@@ -243,7 +244,8 @@ class ProfileCreator(commands.Cog):
                 "discord_id": ctx.author.id,
                 "discord_ursername": ctx.author.name,
                 "banner_url": "",
-                "soundtrack_url": ""
+                "soundtrack_url": "",
+                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
             })
 
             # Save to Firestore
@@ -303,6 +305,7 @@ class ProfileCreator(commands.Cog):
                 return
 
             # Update profile
+            update_data['last_updated'] = firebase_admin.firestore.SERVER_TIMESTAMP
             profile_ref.reference.update(update_data)
 
             # Update discord username in case it changed
@@ -399,6 +402,146 @@ class ProfileCreator(commands.Cog):
     def profile_exists(self, steam_id: str) -> bool:
         """Checks if a profile exists for a given Steam ID."""
         return bool(self.db.collection(COLLECTION_NAME).where(filter=FieldFilter("steam_id", "==", steam_id)).get())
-    
+ 
+    @commands.guild_only()
+    @has_role("Admin")
+    @commands.slash_command(
+        name="admin-create-profile",
+        description="Admin command to create a profile for a non-Discord user"
+    )
+    @option("steam_id", "Steam ID (17 digits)", required=True, type=str)
+    async def admin_create_profile(
+        self, ctx: discord.ApplicationContext, steam_id: str
+    ) -> None:
+        """Creates a profile for a non-Discord user (Admin only)."""
+        await ctx.defer()
+
+        if not self.validate_steam_id(steam_id):
+            await ctx.followup.send("❌ Invalid Steam ID format. Must be 17 digits.")
+            return
+
+        if self.profile_exists(steam_id):
+            await ctx.followup.send("❌ Profile already exists with that Steam ID.")
+            return
+
+        prompt_msg = await ctx.send("Please upload the profile JSON file with the following format:\n```json\n" + 
+                      json.dumps(PROFILE_EXAMPLE, indent=2) + "\n```")
+        await self._track_message(ctx, prompt_msg)
+
+        try:
+            msg = await self.bot.wait_for(
+                "message",
+                timeout=TIMEOUT_SECONDS,
+                check=lambda m: m.author == ctx.author and m.attachments
+            )
+            await self._track_message(ctx, msg)
+
+            if not msg.attachments or not msg.attachments[0].filename.endswith('.json'):
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Please upload a valid JSON file.")
+                return
+
+            # Read and validate JSON
+            file_content = await msg.attachments[0].read()
+            try:
+                profile_data = json.loads(file_content)
+            except json.JSONDecodeError:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Invalid JSON format.")
+                return
+
+            validate_result = self._validate_profile_data(profile_data)
+            if not validate_result[0]:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Invalid profile data structure: " + ", ".join(validate_result[1]))
+                return
+
+            # Add metadata (without discord_id)
+            profile_data.update({
+                "steam_id": steam_id,
+                "discord_id": "",
+                "discord_username": "",
+                "banner_url": "",
+                "soundtrack_url": "",
+                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+            })
+
+            # Save to Firestore
+            self.db.collection(COLLECTION_NAME).document(steam_id).set(profile_data)
+
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send(f"✅ Profile created successfully for user {steam_id}!")
+
+        except TimeoutError:
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send("❌ Upload timed out.")
+        except Exception as e:
+            await self._cleanup_command_messages(ctx)
+            log.error(f"Error creating profile: {e}")
+            await ctx.followup.send("❌ An error occurred while creating the profile.")
+
+    @commands.guild_only()
+    @has_role("Admin")
+    @commands.slash_command(
+        name="admin-update-profile",
+        description="Admin command to update a profile for a non-Discord user"
+    )
+    @option("steam_id", "Steam ID to update", required=True, type=str)
+    async def admin_update_profile(self, ctx: discord.ApplicationContext, steam_id: str) -> None:
+        """Updates a profile for a non-Discord user (Admin only)."""
+        await ctx.defer()
+
+        # Get profile by Steam ID
+        profile_ref = self.db.collection(COLLECTION_NAME).document(steam_id).get()
+        if not profile_ref.exists:
+            await ctx.followup.send("❌ Profile not found.")
+            return
+
+        prompt_msg = await ctx.send("Please upload the updated profile JSON file.")
+        await self._track_message(ctx, prompt_msg)
+
+        try:
+            msg = await self.bot.wait_for(
+                "message",
+                timeout=TIMEOUT_SECONDS,
+                check=lambda m: m.author == ctx.author and m.attachments
+            )
+            await self._track_message(ctx, msg)
+
+            if not msg.attachments or not msg.attachments[0].filename.endswith('.json'):
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Please upload a valid JSON file.")
+                return
+
+            file_content = await msg.attachments[0].read()
+            try:
+                update_data = json.loads(file_content)
+            except json.JSONDecodeError:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Invalid JSON format.")
+                return
+
+            validate_result = self._validate_profile_data(update_data)
+            if not validate_result[0]:
+                await self._cleanup_command_messages(ctx)
+                await ctx.followup.send("❌ Invalid profile data structure: " + ", ".join(validate_result[1]))
+                return
+
+            update_data['last_updated'] = firebase_admin.firestore.SERVER_TIMESTAMP
+
+            # Update profile
+            profile_ref.reference.update(update_data)
+
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send("✅ Profile updated successfully!")
+
+        except TimeoutError:
+            await self._cleanup_command_messages(ctx)
+            await ctx.followup.send("❌ Upload timed out.")
+        except Exception as e:
+            await self._cleanup_command_messages(ctx)
+            log.error(f"Error updating profile: {e}")
+            await ctx.followup.send("❌ An error occurred while updating the profile.")
+
 def setup(bot: CustomBot):
     bot.add_cog(ProfileCreator(bot))
