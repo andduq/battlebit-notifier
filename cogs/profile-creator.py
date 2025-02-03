@@ -14,6 +14,8 @@ from google.cloud.firestore_v1 import DocumentSnapshot
 import re
 from discord.ext.commands import has_role
 import tempfile
+from datetime import timezone 
+import datetime 
 
 log = logging.getLogger("ProfileCreator")
 
@@ -246,7 +248,7 @@ class ProfileCreator(commands.Cog):
                 "discord_ursername": ctx.author.name,
                 "banner_url": "",
                 "soundtrack_url": "",
-                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+                "last_updated": int(datetime.now(timezone.utc).timestamp())
             })
 
             # Save to Firestore
@@ -306,7 +308,7 @@ class ProfileCreator(commands.Cog):
                 return
 
             # Update profile
-            update_data['last_updated'] = firebase_admin.firestore.SERVER_TIMESTAMP
+            update_data['last_updated'] = int(datetime.now(timezone.utc).timestamp())
             profile_ref.reference.update(update_data)
 
             # Update discord username in case it changed
@@ -390,7 +392,7 @@ class ProfileCreator(commands.Cog):
             url = blob.public_url
             profile_ref.reference.update({
                 f"{file_type}_url": url,
-                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+                "last_updated": int(datetime.now(timezone.utc).timestamp())
             })
 
             # Clean up messages and send final confirmation
@@ -469,7 +471,7 @@ class ProfileCreator(commands.Cog):
                 "discord_username": "",
                 "banner_url": "",
                 "soundtrack_url": "",
-                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+                "last_updated": int(datetime.now(timezone.utc).timestamp())
             })
 
             # Save to Firestore
@@ -533,7 +535,7 @@ class ProfileCreator(commands.Cog):
                 await ctx.followup.send("❌ Invalid profile data structure: " + ", ".join(validate_result[1]))
                 return
 
-            update_data['last_updated'] = firebase_admin.firestore.SERVER_TIMESTAMP
+            update_data['last_updated'] = int(datetime.now(timezone.utc).timestamp())
 
             # Update profile
             profile_ref.reference.update(update_data)
@@ -627,7 +629,7 @@ class ProfileCreator(commands.Cog):
             # Update profile with new URL
             profile_ref.reference.update({
                 f"{file_type}_url": blob.public_url,
-                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+                "last_updated": int(datetime.now(timezone.utc).timestamp())
             })
 
             # Clean up messages and send final confirmation
