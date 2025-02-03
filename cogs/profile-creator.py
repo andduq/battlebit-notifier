@@ -13,6 +13,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import DocumentSnapshot
 import re
 from discord.ext.commands import has_role
+import tempfile
 
 log = logging.getLogger("ProfileCreator")
 
@@ -367,25 +368,30 @@ class ProfileCreator(commands.Cog):
                 await ctx.followup.send(f"❌ Invalid file type. Allowed types: {', '.join(allowed_types)}")
                 return
 
-            # Upload to Storage bucket with consistent naming
-            steam_id = profile_ref.get('steam_id')
-            blob_path = f"{steam_id}/{file_type}{ext}"
-            
-            # Delete old file if it exists
-            for old_ext in allowed_types:
-                old_blob = self.bucket.blob(f"{steam_id}/{file_type}{old_ext}")
-                if old_blob.exists():
-                    old_blob.delete()
-            
-            # Upload new file
-            blob = self.bucket.blob(blob_path)
-            file_data = await file.read()
-            blob.upload_from_string(file_data)
-            blob.make_public()
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+                # Download the file
+                await file.save(temp_file.name)
+                
+                # Upload to Storage bucket with consistent naming
+                steam_id = profile_ref.get('steam_id')
+                blob_path = f"{steam_id}/{file_type}{ext}"
+                blob = self.bucket.blob(blob_path)
+                
+                # Upload the file directly, overwriting if it exists
+                blob.upload_from_filename(temp_file.name)
+                blob.content_type = file.content_type  # Preserve the content type
+                blob.make_public()
+
+            # Clean up temporary file
+            os.unlink(temp_file.name)
 
             # Update profile with new URL
             url = blob.public_url
-            profile_ref.reference.update({f"{file_type}_url": url})
+            profile_ref.reference.update({
+                f"{file_type}_url": url,
+                "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
+            })
 
             # Clean up messages and send final confirmation
             await self._cleanup_command_messages(ctx)
@@ -601,22 +607,24 @@ class ProfileCreator(commands.Cog):
                 await ctx.followup.send(f"❌ Invalid file type. Allowed types: {', '.join(allowed_types)}")
                 return
 
-            # Upload to Storage bucket with consistent naming
-            blob_path = f"{steam_id}/{file_type}{ext}"
-            
-            # Delete old file if it exists
-            for old_ext in allowed_types:
-                old_blob = self.bucket.blob(f"{steam_id}/{file_type}{old_ext}")
-                if old_blob.exists():
-                    old_blob.delete()
-            
-            # Upload new file
-            blob = self.bucket.blob(blob_path)
-            file_data = await file.read()
-            blob.upload_from_string(file_data)
-            blob.make_public()
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+                # Download the file
+                await file.save(temp_file.name)
+                
+                # Upload to Storage bucket with consistent naming
+                blob_path = f"{steam_id}/{file_type}{ext}"
+                blob = self.bucket.blob(blob_path)
+                
+                # Upload the file directly, overwriting if it exists
+                blob.upload_from_filename(temp_file.name)
+                blob.content_type = file.content_type  # Preserve the content type
+                blob.make_public()
 
-            # Update profile with new URL and timestamp
+            # Clean up temporary file
+            os.unlink(temp_file.name)
+
+            # Update profile with new URL
             profile_ref.reference.update({
                 f"{file_type}_url": blob.public_url,
                 "last_updated": firebase_admin.firestore.SERVER_TIMESTAMP
