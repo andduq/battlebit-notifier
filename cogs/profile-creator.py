@@ -128,7 +128,11 @@ class ProfileCreator(commands.Cog):
         self.db = get_firestore_client()
         self.bucket = get_storage_bucket()
         self.command_messages = {}  # Track messages by user ID
-        self.steam_profile_monitor.start()  # Start the monitoring task
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        log.info("ProfileCreator cog is ready")
+        self.steam_profile_monitor.start()
 
     def cog_unload(self):
         self.steam_profile_monitor.cancel()  # Cleanup task on unload
@@ -385,7 +389,10 @@ class ProfileCreator(commands.Cog):
 
             # After validation but before updating
             if "membership_type" in update_data:
-                current_type = profile_ref.get("membership_type", "Member")
+                current_type = profile_ref.get("membership_type")
+                if current_type is None:
+                    current_type = "Member"
+                
                 if update_data["membership_type"] != current_type:
                     is_approved = await self._validate_membership_request(ctx, update_data["membership_type"])
                     if not is_approved:
@@ -396,7 +403,10 @@ class ProfileCreator(commands.Cog):
             profile_ref.reference.update(update_data)
 
             # Update discord username in case it changed
-            profile_ref.reference.update({"discord_username": ctx.author.name})
+            if "discord_username" in update_data:
+                profile_ref.reference.update({"discord_username": update_data["discord_username"]})
+            else:
+                profile_ref.reference.update({"discord_username": ctx.author.name})
 
             # Clean up messages and send final confirmation
             await self._cleanup_command_messages(ctx)
@@ -789,7 +799,7 @@ class ProfileCreator(commands.Cog):
             log.error(f"Error updating aliases for Steam ID {steam_id}: {e}")
 
     @tasks.loop(seconds=30.0)
-    async def steam_profile_monitor(self):
+    async def steam_profile_monitor(self) -> None:
         """Monitors Steam profiles for username changes."""
         try:
             log.info("Checking Steam profiles for name changes...")

@@ -51,8 +51,6 @@ class Leaderboard(commands.Cog):
         ]
         sorted_data = sorted(
             cleaned_data,
-            key=lambda x: int(x["XP"]) / int(x["MaxPlayers"]),
-            reverse=True,
         )
 
         max_n = min(n, len(sorted_data))
@@ -116,6 +114,8 @@ class Leaderboard(commands.Cog):
 
     @tasks.loop(seconds=5)
     async def fetch_leaderboard_loop(self) -> None:
+
+        log.info("Fetching leaderboard...")
         async with self.bot.web_session.get(LEADERBOARD_URL) as response:
             if response.status != 200:
                 log.error(f"Failed to fetch leaderboard: {response.status}")
