@@ -788,7 +788,7 @@ class ProfileCreator(commands.Cog):
         except Exception as e:
             log.error(f"Error updating aliases for Steam ID {steam_id}: {e}")
 
-    @tasks.loop(seconds=5.0)
+    @tasks.loop(seconds=30.0)
     async def steam_profile_monitor(self):
         """Monitors Steam profiles for username changes."""
         try:
