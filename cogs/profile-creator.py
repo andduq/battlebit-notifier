@@ -5,7 +5,7 @@ from bot import CustomBot
 import logging
 from firestore_helper import get_firestore_client, get_storage_bucket
 import firebase_admin
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Literal
 import json
 import os
 from google.cloud import storage
@@ -16,6 +16,7 @@ from discord.ext.commands import has_role
 import tempfile
 from datetime import timezone 
 from datetime import datetime
+import asyncio
 
 log = logging.getLogger("ProfileCreator")
 
@@ -26,6 +27,7 @@ PROFILE_SCHEMA = {
     "youtube_profile_url" : str,
     "twitch_profile_url" : str,
     "join_date": int,  # Unix timestamp
+    "membership_type": str,
     "stats": {
         "m200_kills": int,
         "l96_kills": int,
@@ -49,6 +51,7 @@ PROFILE_SCHEMA_STR = {
     "youtube_profile_url" : "str",
     "twitch_profile_url" : "str",
     "join_date": "int",  # Unix timestamp
+    "membership_type": "str (Member or Founder)",
     "stats": {
         "m200_kills": "int",
         "l96_kills": "int",
@@ -73,6 +76,7 @@ PROFILE_EXAMPLE = {
     "youtube_profile_url" : "https://www.youtube.com/channel/username or nothing",
     "twitch_profile_url" : "https://www.twitch.tv/username or nothing",
     "join_date": 1672531200,  # Example: Jan 1, 2023 00:00:00 UTC
+    "membership_type": "Member",
     "stats": {
         "m200_kills": 100,
         "l96_kills": 50,
@@ -99,6 +103,8 @@ COLLECTION_NAME = "profiles"
 MAX_BIO_LENGTH = 500
 STEAM_ID_PATTERN = r'^\d{17}$'  # Steam ID format validation
 COLOR_PATTERN = r'^#[0-9A-Fa-f]{6}$'  # Hex color validation
+MEMBERSHIP_TYPES = Literal["Member", "Founder"]
+ALLOWED_MEMBERSHIP_TYPES = ["Member", "Founder"]
 
 # Field constraints
 STAT_CONSTRAINTS = {
@@ -164,6 +170,13 @@ class ProfileCreator(commands.Cog):
                 elif not re.match(COLOR_PATTERN, data["accent_color"]):
                     errors.append("accent_color must be a valid hex color (e.g., #FF0000)")
 
+            # Validate membership_type
+            if "membership_type" in data:
+                if not isinstance(data["membership_type"], str):
+                    errors.append("membership_type must be a string")
+                elif data["membership_type"] not in ALLOWED_MEMBERSHIP_TYPES:
+                    errors.append(f"membership_type must be one of: {', '.join(ALLOWED_MEMBERSHIP_TYPES)}")
+
             # Validate stats
             if "stats" in data:
                 if not isinstance(data["stats"], dict):
@@ -206,7 +219,41 @@ class ProfileCreator(commands.Cog):
         """Validates Steam ID format."""
         return bool(re.match(STEAM_ID_PATTERN, steam_id))
 
+    async def _validate_membership_request(self, ctx: discord.ApplicationContext, membership_type: str) -> bool:
+        """Validates founder membership requests with admin confirmation."""
+        if membership_type != "Founder":
+            return True
+
+        # Send confirmation request
+        admin_role = discord.utils.get(ctx.guild.roles, name="Admin")
+        confirm_msg = await ctx.followup.send(
+            f"User {ctx.author.mention} is requesting Founder status. {admin_role.mention} confirmation required.\n"
+            "React with ✅ to approve or ❌ to deny.",
+            wait=True
+        )
+
+        # Add reactions
+        await confirm_msg.add_reaction("✅")
+        await confirm_msg.add_reaction("❌")
+
+        def check(reaction, user):
+            return (
+                user.get_role(discord.utils.get(ctx.guild.roles, name="Admin").id) and
+                str(reaction.emoji) in ["✅", "❌"] and
+                reaction.message.id == confirm_msg.id
+            )
+
+        try:
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=300.0, check=check)
+            await confirm_msg.delete()
+            return str(reaction.emoji) == "✅"
+        except asyncio.TimeoutError:
+            await confirm_msg.delete()
+            await ctx.followup.send("❌ Founder request timed out. Defaulting to Member status.")
+            return False
+
     @commands.guild_only()
+    @has_role("Member")
     @commands.slash_command(name="create-profile", description="Create a new profile using a JSON file")
     @option("steam_id", "Your Steam ID (17 digits)", required=True, type=str)
     async def create_profile(self, ctx: discord.ApplicationContext, steam_id: str) -> None:
@@ -253,14 +300,21 @@ class ProfileCreator(commands.Cog):
                 await ctx.followup.send("❌ Invalid profile data structure: " + ", ".join(validate_result[1]))
                 return
 
+            # After validation but before saving
+            if "membership_type" in profile_data:
+                is_approved = await self._validate_membership_request(ctx, profile_data["membership_type"])
+                if not is_approved:
+                    profile_data["membership_type"] = "Member"
+
             # Add metadata
             profile_data.update({
                 "steam_id": steam_id,
                 "discord_id": ctx.author.id,
-                "discord_ursername": ctx.author.name,
+                "discord_username": ctx.author.name,
                 "banner_url": "",
                 "soundtrack_url": "",
-                "last_updated": int(datetime.now(timezone.utc).timestamp())
+                "last_updated": int(datetime.now(timezone.utc).timestamp()),
+                "membership_type": profile_data.get("membership_type", "Member"),  # Default to Member
             })
 
             # Save to Firestore
@@ -279,6 +333,7 @@ class ProfileCreator(commands.Cog):
             await ctx.followup.send("❌ An error occurred while creating your profile.")
 
     @commands.guild_only()
+    @has_role("Member")
     @commands.slash_command(name="update-profile", description="Update profile using a JSON file")
     async def update_profile(self, ctx: discord.ApplicationContext) -> None:
         """Updates an existing profile for a user."""
@@ -319,6 +374,14 @@ class ProfileCreator(commands.Cog):
                 await ctx.followup.send("❌ Invalid profile data structure: " + ", ".join(validate_result[1]))
                 return
 
+            # After validation but before updating
+            if "membership_type" in update_data:
+                current_type = profile_ref.get("membership_type", "Member")
+                if update_data["membership_type"] != current_type:
+                    is_approved = await self._validate_membership_request(ctx, update_data["membership_type"])
+                    if not is_approved:
+                        update_data["membership_type"] = current_type
+
             # Update profile
             update_data['last_updated'] = int(datetime.now(timezone.utc).timestamp())
             profile_ref.reference.update(update_data)
@@ -339,6 +402,7 @@ class ProfileCreator(commands.Cog):
             await ctx.followup.send("❌ An error occurred while updating your profile.")
 
     @commands.guild_only()
+    @has_role("Member")
     @commands.slash_command(name="update-banner", description="Update profile banner")
     async def update_banner(self, ctx: discord.ApplicationContext) -> None:
         """Updates the profile banner for a user."""
@@ -346,6 +410,7 @@ class ProfileCreator(commands.Cog):
         await self._handle_file_upload(ctx, "banner", ALLOWED_IMAGE_TYPES)
 
     @commands.guild_only()
+    @has_role("Member")
     @commands.slash_command(name="update-soundtrack", description="Update profile soundtrack")
     async def update_soundtrack(self, ctx: discord.ApplicationContext) -> None:
         """Updates the profile soundtrack for a user."""
@@ -483,7 +548,8 @@ class ProfileCreator(commands.Cog):
                 "discord_username": "",
                 "banner_url": "",
                 "soundtrack_url": "",
-                "last_updated": int(datetime.now(timezone.utc).timestamp())
+                "last_updated": int(datetime.now(timezone.utc).timestamp()),
+                "membership_type": profile_data.get("membership_type", "Member"),
             })
 
             # Save to Firestore
