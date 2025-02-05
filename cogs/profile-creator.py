@@ -792,6 +792,7 @@ class ProfileCreator(commands.Cog):
     async def steam_profile_monitor(self):
         """Monitors Steam profiles for username changes."""
         try:
+            log.info("Checking Steam profiles for name changes...")
             profiles = self.db.collection(COLLECTION_NAME).get()
             steam_ids = [profile.id for profile in profiles]
 
