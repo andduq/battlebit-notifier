@@ -1,11 +1,11 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.commands import option
 from bot import CustomBot
 import logging
 from firestore_helper import get_firestore_client, get_storage_bucket
 import firebase_admin
-from typing import Dict, Any, Tuple, Optional, Literal
+from typing import Dict, Any, Tuple, Optional, Literal, List
 import json
 import os
 from google.cloud import storage
@@ -17,6 +17,7 @@ import tempfile
 from datetime import timezone 
 from datetime import datetime
 import asyncio
+import aiohttp
 
 log = logging.getLogger("ProfileCreator")
 
@@ -115,6 +116,10 @@ STAT_CONSTRAINTS = {
     "prestige": (0, 10),
 }
 
+STEAM_API_KEY = os.getenv("STEAM_API_KEY")
+STEAM_API_URL = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
+BATCH_SIZE = 100  # Steam API spec only allows up to 100 Steam IDs per request
+
 class ProfileCreator(commands.Cog):
     """Cog for managing user profiles including creation, updates, and file uploads."""
     
@@ -123,6 +128,10 @@ class ProfileCreator(commands.Cog):
         self.db = get_firestore_client()
         self.bucket = get_storage_bucket()
         self.command_messages = {}  # Track messages by user ID
+        self.steam_profile_monitor.start()  # Start the monitoring task
+
+    def cog_unload(self):
+        self.steam_profile_monitor.cancel()  # Cleanup task on unload
 
     async def _track_message(self, ctx: discord.ApplicationContext, message: discord.Message) -> None:
         """Tracks a message related to a command interaction."""
@@ -721,6 +730,89 @@ class ProfileCreator(commands.Cog):
             await self._cleanup_command_messages(ctx)
             log.error(f"Error handling file upload: {e}")
             await ctx.followup.send("❌ An error occurred while processing your file.")
+
+    async def fetch_steam_profiles(self, steam_ids: List[str]) -> Dict[str, str]:
+        """Fetches Steam profiles for given Steam IDs."""
+        try:
+            params = {
+                "key": STEAM_API_KEY,
+                "steamids": ",".join(steam_ids)
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(STEAM_API_URL, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        players = data.get("response", {}).get("players", [])
+                        return {
+                            str(player["steamid"]): player["personaname"]
+                            for player in players
+                        }
+            return {}
+        except Exception as e:
+            log.error(f"Error fetching Steam profiles: {e}")
+            return {}
+
+    async def update_profile_aliases(self, steam_id: str, current_username: str, 
+                                   profile_ref: DocumentSnapshot) -> None:
+        """Updates profile aliases if username has changed."""
+        try:
+            profile_data = profile_ref.to_dict()
+            stored_username = profile_data.get("steam_username")
+            
+            # Initialize aliases array if it doesn't exist
+            if "aliases" not in profile_data:
+                profile_data["aliases"] = []
+
+            # If username has changed, add to aliases
+            if stored_username and stored_username != current_username:
+                alias_entry = {
+                    "steam_username": stored_username,
+                    "date": int(datetime.now(timezone.utc).timestamp())
+                }
+                profile_data["aliases"].append(alias_entry)
+                
+                # Update profile with new username and aliases
+                profile_ref.reference.update({
+                    "steam_username": current_username,
+                    "aliases": profile_data["aliases"],
+                    "date": int(datetime.now(timezone.utc).timestamp())
+                })
+                log.info(f"Updated aliases for Steam ID {steam_id}")
+            elif not stored_username:
+                # If no username stored, just set it
+                profile_ref.reference.update({
+                    "steam_username": current_username,
+                    "date": int(datetime.now(timezone.utc).timestamp())
+                })
+
+        except Exception as e:
+            log.error(f"Error updating aliases for Steam ID {steam_id}: {e}")
+
+    @tasks.loop(seconds=5.0)
+    async def steam_profile_monitor(self):
+        """Monitors Steam profiles for username changes."""
+        try:
+            profiles = self.db.collection(COLLECTION_NAME).get()
+            steam_ids = [profile.id for profile in profiles]
+
+            for i in range(0, len(steam_ids), BATCH_SIZE):
+                batch_ids = steam_ids[i:i + BATCH_SIZE]
+                steam_data = await self.fetch_steam_profiles(batch_ids)
+
+                for steam_id, username in steam_data.items():
+                    profile_ref = next(
+                        (p for p in profiles if p.id == steam_id), None
+                    )
+                    if profile_ref:
+                        await self.update_profile_aliases(steam_id, username, profile_ref)
+
+        except Exception as e:
+            log.error(f"Error in Steam profile monitor: {e}")
+
+    @steam_profile_monitor.before_loop
+    async def before_steam_profile_monitor(self):
+        """Wait for bot to be ready before starting the task."""
+        await self.bot.wait_until_ready()
 
 def setup(bot: CustomBot):
     bot.add_cog(ProfileCreator(bot))
