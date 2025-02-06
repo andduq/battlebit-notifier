@@ -101,7 +101,7 @@ ALLOWED_AUDIO_TYPES = ['.mp3', '.wav']
 # Constants
 TIMEOUT_SECONDS = 300
 COLLECTION_NAME = "profiles"
-MAX_BIO_LENGTH = 500
+MAX_BIO_LENGTH = 600
 STEAM_ID_PATTERN = r'^\d{17}$'  # Steam ID format validation
 COLOR_PATTERN = r'^#[0-9A-Fa-f]{6}$'  # Hex color validation
 MEMBERSHIP_TYPES = Literal["Member", "Founder"]
