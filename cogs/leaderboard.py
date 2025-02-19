@@ -49,8 +49,11 @@ class Leaderboard(commands.Cog):
         cleaned_data = [
             clan for clan in top_clans if int(clan["MaxPlayers"]) > min_players
         ]
+        
         sorted_data = sorted(
             cleaned_data,
+            key=lambda x: int(x["XP"]) / int(x["MaxPlayers"]),
+            reverse=True,
         )
 
         max_n = min(n, len(sorted_data))
