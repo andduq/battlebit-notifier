@@ -6,3 +6,4 @@ python-dotenv
 Requests
 table2ascii
 fuzzywuzzy
+python-Levenshtein
