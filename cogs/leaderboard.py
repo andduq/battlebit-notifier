@@ -1,10 +1,8 @@
 import json
-import requests
 import discord
 from discord.ext import commands, tasks
-import time
+from discord.commands import option
 from typing import List
-import aiohttp
 from bot import CustomBot
 from datetime import datetime
 from table2ascii import table2ascii as t2a, PresetStyle
@@ -12,6 +10,7 @@ import os
 import logging
 from typing import Tuple
 from firestore_helper import get_firestore_client
+from fuzzywuzzy import fuzz
 
 LEADERBOARD_URL = "https://publicapi.battlebit.cloud/Leaderboard/Get"
 log = logging.getLogger("Leaderboard")
@@ -175,6 +174,122 @@ class Leaderboard(commands.Cog):
                     except Exception as e:
                         log.warning(f"Cannot send notification to channel {self.notification_channel}. Exception: {e}")
 
+    @commands.guild_only()
+    @commands.slash_command(
+        name="leaderboard_search",
+        description="Search for an entry in the leaderboard",
+    )
+    @option(
+        name="category",
+        description="The category to search in",
+        type=str,
+        required=True,
+        autocomplete=discord.utils.basic_autocomplete(["TopClans", "MostXP", "MostHeals", "MostRevives", "MostVehiclesDestroyed", "MostVehicleRepairs", "MostRoadkills", "MostLongestKill", "MostObjectivesComplete", "MostKills"])
+    )
+    async def leaderboard_search(
+        self, 
+        ctx: discord.ApplicationContext, 
+        category: str, 
+        query: str, 
+        max_results: int = 10, 
+        min_similarity: float = 0.6 
+    ) -> None:
+        await ctx.defer()
+        
+        try:
+            if not self.cached_leaderboard:
+                await ctx.send_followup("Leaderboard data not available yet. Please try again in a few seconds.")
+                return
+
+            category_index = next((i for i, item in enumerate(self.cached_leaderboard) 
+                                 if list(item.keys())[0] == category), None)
+            
+            if category_index is None:
+                await ctx.send_followup(f"Invalid category: {category}")
+                return
+
+            if category == "TopClans":
+                await self._search_clans(ctx, query, max_results, min_similarity)
+            else:
+                await self._search_players(ctx, category, query, max_results, min_similarity)
+
+        except Exception as e:
+            log.error(f"Error in leaderboard search: {e}")
+            await ctx.send_followup("An error occurred while searching the leaderboard.")
+
+    async def _search_clans(self, ctx, query: str, max_results: int, min_similarity: float) -> None:
+        clans = self.cached_leaderboard[0]["TopClans"]
+        hits = []
+        
+        for i, clan in enumerate(clans):
+            clan_similarity = fuzz.token_set_ratio(query.lower(), clan["Clan"].lower()) / 100
+            tag_similarity = fuzz.token_set_ratio(query.lower(), clan["Tag"].lower()) / 100
+            max_similarity = max(clan_similarity, tag_similarity)
+            
+            if max_similarity >= min_similarity:
+                xp_per_player = int(clan["XP"]) / int(clan["MaxPlayers"])
+                hits.append({
+                    "similarity": max_similarity,
+                    "rank": i + 1,
+                    "clan": clan["Clan"],
+                    "tag": clan["Tag"],
+                    "xp": self.format_number(int(clan["XP"])),
+                    "players": clan["MaxPlayers"],
+                    "xp_per_player": self.format_number(xp_per_player)
+                })
+        
+        hits.sort(key=lambda x: x["similarity"], reverse=True)
+        hits = hits[:max_results]
+        
+        if not hits:
+            await ctx.send_followup(f"No clans found matching '{query}' with similarity >= {min_similarity:.2f}")
+            return
+
+        header = ["Rank", "Clan", "Tag", "Total XP", "Players", "XP/player", "Match"]
+        data = [[
+            str(hit["rank"]),
+            hit["clan"],
+            hit["tag"],
+            hit["xp"],
+            str(hit["players"]),
+            hit["xp_per_player"],
+            f"{hit['similarity']:.2f}"
+        ] for hit in hits]
+
+        table = t2a(header=header, body=data, style=PresetStyle.thin_compact)
+        await ctx.send_followup(f"```\nSearch results for '{query}' in clans:\n{table}```")
+
+    async def _search_players(self, ctx, category: str, query: str, max_results: int, min_similarity: float) -> None:
+        players = next(item[category] for item in self.cached_leaderboard if category in item)
+        hits = []
+        
+        for i, player in enumerate(players):
+            similarity = fuzz.token_set_ratio(query.lower(), player["Name"].lower()) / 100
+            if similarity >= min_similarity:
+                hits.append({
+                    "similarity": similarity,
+                    "rank": i + 1,
+                    "name": player["Name"],
+                    "value": self.format_number(float(player["Value"]))
+                })
+        
+        hits.sort(key=lambda x: x["similarity"], reverse=True)
+        hits = hits[:max_results]
+        
+        if not hits:
+            await ctx.send_followup(f"No players found matching '{query}' with similarity >= {min_similarity:.2f}") 
+            return
+
+        header = ["Rank", "Name", "Value", "Match"]
+        data = [[
+            str(hit["rank"]), 
+            hit["name"], 
+            hit["value"],
+            f"{hit['similarity']:.2f}"
+        ] for hit in hits]
+        
+        table = t2a(header=header, body=data, style=PresetStyle.thin_compact)
+        await ctx.send_followup(f"```\nSearch results for '{query}' in {category}:\n{table}```")
 
 def setup(bot : CustomBot) -> None:
     bot.add_cog(Leaderboard(bot))
